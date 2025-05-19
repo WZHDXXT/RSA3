@@ -125,8 +125,7 @@ def train_model(model, train_loader, val_loader, device, epochs=20):
     return model
 
 # ---------- Evaluation ----------
-def evaluate_recall_hit(model, full_df, test_df, id2item, item2id, device, top_k=10):
-    print("\n🔍 Evaluating Recall@10 / Hit@10...")
+def evaluate_recall_hit(model, full_df, test_df, item2id, device, top_k=10):
     all_items = set(item2id.values())
     test_df = test_df[test_df["user_id"].isin(user2id)]
     test_df["user_id"] = test_df["user_id"].map(user2id)
@@ -167,7 +166,7 @@ if __name__ == "__main__":
 
     train_file = "train.csv"
     test_file = "test.csv"
-    submit_file = "sample_submission.csv"
+    # submit_file = "sample_submission.csv"
 
     train_df, val_df, num_users, num_items, user2id, item2id, id2item, full_df = load_data_with_negatives(train_file)
 
@@ -189,4 +188,3 @@ if __name__ == "__main__":
     model = train_model(model, train_loader, val_loader, device)
 
     evaluate_recall_hit(model, full_df, pd.read_csv(test_file), id2item, item2id, device)
-    generate_submission(model, user2id, item2id, id2item, submit_file, "submission.csv", device)

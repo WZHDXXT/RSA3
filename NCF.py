@@ -157,35 +157,8 @@ def evaluate_recall_hit(model, full_df, test_df, id2item, item2id, device, top_k
             recall_list.append(recall)
             hit_list.append(1 if hits > 0 else 0)
 
-    print(f"📊 Recall@{top_k}: {np.mean(recall_list):.4f}, Hit@{top_k}: {np.mean(hit_list):.4f}")
+    print(f"Recall@{top_k}: {np.mean(recall_list):.4f}, Hit@{top_k}: {np.mean(hit_list):.4f}")
 
-# ---------- Submission Generator ----------
-def generate_submission(model, user2id, item2id, id2item, submit_users_file, output_file, device, top_k=10):
-    print("\n📝 Generating submission.csv...")
-    submit_users = pd.read_csv(submit_users_file)["user_id"].tolist()
-    all_items = list(item2id.values())
-
-    records = []
-    model.eval()
-    with torch.no_grad():
-        for uid in submit_users:
-            if uid not in user2id:
-                records.append([uid] + [0]*top_k)
-                continue
-            uid_idx = user2id[uid]
-            user_tensor = torch.full((len(all_items),), uid_idx, dtype=torch.long).to(device)
-            item_tensor = torch.tensor(all_items, dtype=torch.long).to(device)
-            scores = torch.sigmoid(model(user_tensor, item_tensor).squeeze(-1))
-            top_idx = torch.topk(scores, k=top_k).indices.cpu().numpy()
-            top_items = [id2item[all_items[i]] for i in top_idx]
-            records.append([uid] + top_items)
-
-    sub_df = pd.DataFrame(records, columns=["user_id"] + [f"item{i}" for i in range(top_k)])
-    sub_df["ID"] = sub_df["user_id"]
-    sub_df["item_id"] = sub_df[[f"item{i}" for i in range(top_k)]].astype(str).agg(",".join, axis=1)
-    sub_df = sub_df[["ID", "user_id", "item_id"]]
-    sub_df.to_csv(output_file, index=False)
-    print(f"✅ Saved to {output_file}")
 
 # ---------- Main ----------
 if __name__ == "__main__":

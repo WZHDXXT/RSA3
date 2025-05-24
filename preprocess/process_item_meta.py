@@ -55,4 +55,4 @@ def process_item_meta(input_path, output_path):
     df.to_pickle(output_path)
 
 if __name__ == "__main__":
-    process_item_meta('../data/item_meta.csv', '../data/processed_item_meta.pkl')
+    process_item_meta('data/item_meta.csv', 'data/processed_item_meta.pkl')

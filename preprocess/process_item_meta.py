@@ -43,7 +43,13 @@ def process_item_meta(input_path, output_path):
 
         return f"{title} {description} {features_str} {details_str}"
 
-    df['text_embedding'] = df.apply(concat_text, axis=1).apply(lambda x: model.encode(x))
+    df['full_text'] = df.apply(concat_text, axis=1)
+    df['text_embedding'] = model.encode(
+        df['full_text'].tolist(),
+        batch_size=32,
+        show_progress_bar=True,
+        convert_to_numpy=True
+    ).tolist()
 
     # 保存处理后的数据
     df.to_pickle(output_path)

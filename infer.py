@@ -18,8 +18,7 @@ def predict_topk_for_submission(submission_path, train_path, meta_path, model_pa
         'category': torch.tensor(meta_df['main_category'].values, dtype=torch.long),
         'store': torch.tensor(meta_df['store'].values, dtype=torch.long),
         'parent_asin': torch.tensor(meta_df['parent_asin'].values, dtype=torch.long),
-        'text_embedding': torch.tensor(meta_df['text_embedding'].tolist(), dtype=torch.float),
-        'numeric_feats': torch.tensor(meta_df[['average_rating', 'rating_number', 'price']].values, dtype=torch.float)
+        'text_embedding': torch.tensor(meta_df['text_embedding'].tolist(), dtype=torch.float)
     }
 
     item_encoder = ItemEncoder(num_categories, num_stores, num_parent_asin, text_embedding_dim=384).to(device)
@@ -47,8 +46,7 @@ def predict_topk_for_submission(submission_path, train_path, meta_path, model_pa
         item_features_tensor['category'].to(device),
         item_features_tensor['store'].to(device),
         item_features_tensor['parent_asin'].to(device),
-        item_features_tensor['text_embedding'].to(device),
-        item_features_tensor['numeric_feats'].to(device)
+        item_features_tensor['text_embedding'].to(device)
     )
 
     results = []
@@ -75,7 +73,7 @@ if __name__ == "__main__":
     args.add_argument('--submission_path', type=str, default='data/sample_submission.csv')
     args.add_argument('--train_path', type=str, default='data/train.csv')
     args.add_argument('--meta_path', type=str, default='data/processed_item_meta.pkl')
-    args.add_argument('--model_path', type=str, default='output/two_tower_model.pt')
+    args.add_argument('--model_path', type=str, default='models/two_tower_model.pt')
     args.add_argument('--output_path', type=str, default='output/submission.csv')
     args.add_argument('--top_k', type=int, default=10)
     args.add_argument('--max_len', type=int, default=50)

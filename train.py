@@ -84,16 +84,16 @@ def train(args):
                 labels = torch.stack(labels)
             user_seq = user_seq.to(args.device)
             labels = labels.to(args.device)
-            item_features = [feat.cuda() if args.device.startswith('cuda') else feat.cpu() for feat in item_features]
-            category, store, parent_asin, text_embedding = item_features
+            item_features = [feat.to(args.device) for feat in item_features]
+            category, store, parent_asin, text_embedding, numeric_feats = item_features
 
-            # print(f"[DEBUG] category max: {category.max().item()}, embedding size: {num_categories}")
-            # print(f"[DEBUG] store max: {store.max().item()}, embedding size: {num_stores}")
-            # print(f"[DEBUG] parent_asin max: {parent_asin.max().item()}, embedding size: {num_parent_asin}")
-            # print("[DEBUG] item_ids sample:", item_ids[:5])
+            print(f"[DEBUG] category max: {category.max().item()}, embedding size: {num_categories}")
+            print(f"[DEBUG] store max: {store.max().item()}, embedding size: {num_stores}")
+            print(f"[DEBUG] parent_asin max: {parent_asin.max().item()}, embedding size: {num_parent_asin}")
+            print("[DEBUG] item_ids sample:", item_ids[:5])
 
             scores = model(user_seq, *item_features)
-            # print("[DEBUG] scores sample:", scores[:5].detach().cpu().numpy())
+            print("[DEBUG] scores sample:", scores[:5].detach().cpu().numpy())
             loss = F.binary_cross_entropy_with_logits(scores, labels)
             optimizer.zero_grad()
             loss.backward()

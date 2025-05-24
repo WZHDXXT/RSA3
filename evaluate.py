@@ -1,59 +1,95 @@
-# evaluate.py
+# --- Added function for top-k prediction for submission ---
+def predict_topk_for_submission(submission_path, train_path, meta_path, model_path, top_k=10, max_len=50, device='cpu'):
+    import pandas as pd
+    import torch
+    from collections import defaultdict
+    from models.user_encoder import UserEncoder
+    from models.item_encoder import ItemEncoder
+    from models.two_tower_model import TwoTowerModel
 
-import torch
-from torch.utils.data import DataLoader
-from utils.data_loader import RecDataset
-from utils.metrics import recall_at_k
-from utils.config import get_config
-from models.two_tower_model import TwoTowerModel
-import pickle
-import pandas as pd
-from tqdm import tqdm
+    # Step 1: Load metadata and model
+    meta_df = pd.read_pickle(meta_path)
+    num_items = len(meta_df)
+    num_categories = meta_df['main_category'].max() + 1
+    num_stores = meta_df['store'].max() + 1
+    num_parent_asin = meta_df['parent_asin'].max() + 1
 
-@torch.no_grad()
-def evaluate(model, dataloader, all_item_embeddings, device, k=10):
+    item_features_tensor = {
+        'category': torch.tensor(meta_df['main_category'].values, dtype=torch.long),
+        'store': torch.tensor(meta_df['store'].values, dtype=torch.long),
+        'parent_asin': torch.tensor(meta_df['parent_asin'].values, dtype=torch.long),
+        'text_embedding': torch.tensor(meta_df['text_embedding'].tolist(), dtype=torch.float),
+        'numeric_feats': torch.tensor(meta_df[['average_rating', 'rating_number', 'price']].values, dtype=torch.float)
+    }
+
+    item_encoder = ItemEncoder(num_categories, num_stores, num_parent_asin, text_embedding_dim=384).to(device)
+    user_embedding = torch.nn.Embedding(meta_df['item_id'].max() + 2, 64).to(device)
+    user_encoder = UserEncoder(user_embedding).to(device)
+    model = TwoTowerModel(user_encoder, item_encoder).to(device)
+    model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
-    recalls = []
-    preds = []
-    targets = []
 
-    for batch in tqdm(dataloader, desc="Evaluating"):
-        seqs, _, labels = [x.to(device) for x in batch]
-        user_embs = model.user_encoder(seqs)
+    # Step 2: Build user sequences
+    train_df = pd.read_csv(train_path).sort_values('timestamp')
+    user_seq_dict = defaultdict(list)
+    for _, row in train_df.iterrows():
+        user_seq_dict[row['user_id']].append(row['item_id'])
 
-        # 计算与所有item的相似度
-        scores = torch.matmul(user_embs, all_item_embeddings.T)
-        topk = torch.topk(scores, k=k, dim=-1).indices
+    for uid in user_seq_dict:
+        seq = user_seq_dict[uid][-max_len:]
+        user_seq_dict[uid] = [0] * (max_len - len(seq)) + seq
 
-        preds.extend(topk.cpu().tolist())
-        targets.extend(labels.cpu().tolist())
+    # Step 3: Load submission users and predict top-k
+    submission_df = pd.read_csv(submission_path)
+    user_ids = submission_df['user_id'].unique()
 
-    return recall_at_k(preds, targets, k)
+    all_item_vecs = item_encoder(
+        item_features_tensor['category'].to(device),
+        item_features_tensor['store'].to(device),
+        item_features_tensor['parent_asin'].to(device),
+        item_features_tensor['text_embedding'].to(device),
+        item_features_tensor['numeric_feats'].to(device)
+    )
 
+    results = []
 
-def main():
-    args = get_config()
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    for uid in user_ids:
+        seq = user_seq_dict.get(uid, [0]*max_len)
+        seq_tensor = torch.tensor(seq, dtype=torch.long).unsqueeze(0).to(device)
+        user_vec = model.user_encoder(seq_tensor)  # (1, D)
 
-    # 加载元信息
-    with open(args.item_meta_pkl, 'rb') as f:
-        meta_dict = pickle.load(f)
-    num_items = len(meta_dict)
+        scores = torch.matmul(user_vec, all_item_vecs.T)  # (1, N)
+        topk = torch.topk(scores, k=top_k, dim=-1).indices.squeeze(0)  # (top_k,)
+        topk_items = [str(meta_df.iloc[i]['item_id']) for i in topk.tolist()]
+        results.append({'user_id': uid, 'item_id': ','.join(topk_items)})
 
-    test_dataset = RecDataset(args.test_path, args.item_meta_pkl, args.max_seq_len)
-    test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=4)
+    result_df = pd.DataFrame(results)
+    result_df['ID'] = result_df['user_id']
+    result_df = result_df[['ID', 'user_id', 'item_id']]
+    return result_df
 
-    # 加载模型
-    model = TwoTowerModel(num_items, args).to(device)
-    model.load_state_dict(torch.load(args.save_path))
+if __name__ == "__main__":
+    import argparse
+    import torch
+    args = argparse.ArgumentParser()
+    args.add_argument('--submission_path', type=str, default='data/test.csv')
+    args.add_argument('--train_path', type=str, default='data/train.csv')
+    args.add_argument('--meta_path', type=str, default='data/processed_item_meta.pkl')
+    args.add_argument('--model_path', type=str, default='output/two_tower_model.pt')
+    args.add_argument('--output_path', type=str, default='output/submission.csv')
+    args.add_argument('--top_k', type=int, default=10)
+    args.add_argument('--max_len', type=int, default=50)
+    args.add_argument('--device', type=str, default='cuda' if torch.cuda.is_available() else 'cpu')
+    config = args.parse_args()
 
-    # 获取所有item embedding
-    item_ids = torch.arange(1, num_items + 1).to(device)
-    item_embs = model.item_encoder(item_ids)
-
-    recall = evaluate(model, test_loader, item_embs, device, k=args.top_k)
-    print(f"Recall@{args.top_k}: {recall:.4f}")
-
-
-if __name__ == '__main__':
-    main()
+    submission_df = predict_topk_for_submission(
+        config.submission_path,
+        config.train_path,
+        config.meta_path,
+        config.model_path,
+        top_k=config.top_k,
+        max_len=config.max_len,
+        device=config.device
+    )
+    submission_df.to_csv(config.output_path, index=False)
+    print(f"Saved prediction to {config.output_path}")

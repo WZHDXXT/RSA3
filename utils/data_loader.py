@@ -69,18 +69,12 @@ class RecDataset(Dataset):
         store = meta.get('store', 0)
         parent = meta.get('parent_asin', 0)
         text_embed = meta.get('text_embedding', [0.0] * 384)
-        avg_rating = meta.get('average_rating', 0.0)
-        rating_num = meta.get('rating_number', 0.0)
-        price = meta.get('price', 0.0)
-
         text_embed_tensor = torch.tensor(text_embed, dtype=torch.float)
-
         return [
             torch.tensor(category, dtype=torch.long),
             torch.tensor(store, dtype=torch.long),
             torch.tensor(parent, dtype=torch.long),
-            text_embed_tensor,
-            torch.tensor([avg_rating, rating_num, price], dtype=torch.float)
+            text_embed_tensor
         ]
 
 

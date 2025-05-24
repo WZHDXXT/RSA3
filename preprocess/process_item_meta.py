@@ -6,17 +6,17 @@ import numpy as np
 def process_item_meta(input_path, output_path):
     df = pd.read_csv(input_path)
 
-    # 处理类别型特征
-    df['main_category'] = df['main_category'].astype('category').cat.codes
-    df['store'] = df['store'].astype('category').cat.codes
-    df['parent_asin'] = df['parent_asin'].astype('category').cat.codes
+    # Process categorical features
+    for col in ['main_category', 'store', 'parent_asin']:
+        df[col] = df[col].astype('category').cat.codes
+        df[col] = df[col].apply(lambda x: x if x >= 0 else 0)
 
-    # 处理数值型特征，填充缺失值
+    # Process numerical features, fill missing values
     df['average_rating'] = df['average_rating'].fillna(0)
     df['rating_number'] = df['rating_number'].fillna(0)
     df['price'] = df['price'].fillna(0)
 
-    # 提取文本特征
+    # Extract text features
     model = SentenceTransformer('all-MiniLM-L6-v2')
 
     def concat_text(row):
@@ -51,7 +51,7 @@ def process_item_meta(input_path, output_path):
         convert_to_numpy=True
     ).tolist()
 
-    # 保存处理后的数据
+    # Save processed data
     df.to_pickle(output_path)
 
 if __name__ == "__main__":

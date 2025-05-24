@@ -2,27 +2,28 @@ import os
 import subprocess
 
 def run_preprocess():
-    print(">>> [1/4] 预处理 item_meta ...")
-    os.system("python preprocess/process_item_meta.py")
+    print(">>> [1/4] Preprocessing item_meta ...")
+    os.system("python3 preprocess/process_item_meta.py")
 
 def run_train():
-    print(">>> [2/4] 训练模型 ...")
-    os.system("python train.py")
+    print(">>> [2/4] Training the model ...")
+    os.system("python3 train.py")
 
 def run_evaluate():
-    print(">>> [3/4] 评估 Recall@10 ...")
-    os.system("python evaluate.py")
+    print(">>> [3/4] Evaluating Recall@10 ...")
+    os.system("python3 evaluate.py")
+    os.system("python3 recall.py")
 
 def run_infer():
-    print(">>> [4/4] 生成推荐列表 ...")
-    os.system("python infer.py")
+    print(">>> [4/4] Generating recommendation list ...")
+    os.system("python3 infer.py")
 
 def main():
     run_preprocess()
     run_train()
     run_evaluate()
     run_infer()
-    print(">>> 全流程完成！推荐已写入 output/submission.csv")
+    print(">>> Pipeline complete! Recommendations saved to output/submission.csv")
 
 if __name__ == '__main__':
     main()

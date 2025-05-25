@@ -26,4 +26,4 @@ def compute_recall_at_k(submission_path, test_path, k=10):
     print(f"Average Recall@{k}: {avg_recall:.4f}")
     return avg_recall
 
-compute_recall_at_k("data/submission_test.csv", "test.csv", k=10)
+compute_recall_at_k("output/submission_test.csv", "data/test.csv", k=10)

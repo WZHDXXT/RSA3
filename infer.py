@@ -69,6 +69,7 @@ def predict_topk_for_submission(submission_path, train_path, meta_path, model_pa
 if __name__ == "__main__":
     import argparse
     import torch
+    import os
     args = argparse.ArgumentParser()
     args.add_argument('--submission_path', type=str, default='data/sample_submission.csv')
     args.add_argument('--train_path', type=str, default='data/train.csv')
@@ -89,5 +90,6 @@ if __name__ == "__main__":
         max_len=config.max_len,
         device=config.device
     )
+    os.makedirs(os.path.dirname(config.output_path), exist_ok=True)
     submission_df.to_csv(config.output_path, index=False)
     print(f"Saved prediction to {config.output_path}")

@@ -13,7 +13,7 @@ from torchvision import transforms
 from transformers import CLIPModel
 
 def get_image_encoder(device='cpu'):
-    model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+    model = CLIPModel.from_pretrained("openai/clip-vit-base-patch16")
     model = model.vision_model.eval().to(device)
     return model
 
@@ -92,7 +92,7 @@ def main():
 
     # Load models
     print("[Info] Loading models...")
-    sentence_bert_model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2', device=device)
+    sentence_bert_model = SentenceTransformer('sentence-transformers/paraphrase-MiniLM-L3-v2', device=device)
     image_encoder = get_image_encoder(device)
 
     # Load data
@@ -121,8 +121,17 @@ def main():
 
     print(f"[Info] Finished. Successfully processed {len(item_inputs)} items.")
 
-    # # Save as PyTorch file
-    # torch.save(item_inputs, "item_inputs.pt")
+    # Debug: print first few item_inputs
+    print("\n[Debug] Sample item_inputs:")
+    for i, (item_id, inputs) in enumerate(item_inputs.items()):
+        print(f"\nItem ID: {item_id}")
+        for k, v in inputs.items():
+            print(f"  {k}: shape {tuple(v.shape)}")
+        if i >= 2:
+            break
+
+    # Save as PyTorch file
+    torch.save(item_inputs, "item_inputs.pt")
 
     # # Optional: Save as pickle
     # with open("item_inputs.pkl", "wb") as f:

@@ -3,6 +3,7 @@ import pandas as pd
 from tqdm import tqdm
 import pickle  # Used to save data
 from sentence_transformers import SentenceTransformer
+from io import BytesIO
 
 import torch
 from numpy import log1p
@@ -18,15 +19,19 @@ def get_image_encoder(device='cpu'):
     return model
 
 def load_and_preprocess_image(image_url, image_size=224):
-    """
-    # Load image from URL and preprocess it for CLIP-compatible input
-    # Returns: Tensor [3, H, W] (float32, normalized)
-    """
     try:
-        response = requests.get(image_url, timeout=5)
-        image = Image.open(response.raw).convert('RGB')
+        # print('url', image_url)
+        headers = {
+            'User-Agent': 'Mozilla/5.0'
+        }
+        response = requests.get(image_url, headers=headers, timeout=5)
+        content_type = response.headers.get('Content-Type', '')
+        # print(f"[Debug] Content-Type: {content_type}")
+        if 'image' not in content_type:
+            raise RuntimeError(f"Response content is not an image: {content_type}")
+        image = Image.open(BytesIO(response.content)).convert('RGB')
     except Exception as e:
-        raise RuntimeError(f"Can't load: {image_url}，: {e}")
+        raise RuntimeError(f"Failed to load image: {image_url}, reason: {e}")
 
     preprocess = transforms.Compose([
         transforms.Resize(image_size, interpolation=Image.BICUBIC),
@@ -37,6 +42,7 @@ def load_and_preprocess_image(image_url, image_size=224):
             std=[0.26862954, 0.26130258, 0.27577711]
         )
     ])
+    # print(preprocess(image))
     return preprocess(image)  # Tensor shape: [3, image_size, image_size]
 
 
@@ -65,16 +71,21 @@ def build_item_embedding_input(row, sentence_bert_model, image_encoder=None, dev
 
     # Image features
     image_url = row.get('image_url', None)
+    #print(image_url)
     if image_encoder is not None and image_url:
+        #print('yes')
         try:
             image_tensor = load_and_preprocess_image(image_url)  # shape: [3, H, W]
+            #print(f"[Debug] image_tensor shape: {image_tensor.shape}")
             with torch.no_grad():
-                image_vec = image_encoder(image_tensor.unsqueeze(0).to(device))  # [1, 512]
-        except Exception:
-            image_vec = torch.zeros((1, 512), dtype=torch.float32).to(device)
+                output = image_encoder(pixel_values=image_tensor.unsqueeze(0).to(device))
+                image_vec = output.pooler_output
+        except Exception as e:
+            print(f"[Error] Failed to process image: {e}")
+            image_vec = torch.zeros((1, 768), dtype=torch.float32).to(device)
     else:
-        image_vec = torch.zeros((1, 512), dtype=torch.float32).to(device)
-
+        image_vec = torch.zeros((1, 768), dtype=torch.float32).to(device)
+    print(image_vec.shape)
     return {
         'category': category,
         'store': store,
@@ -106,7 +117,7 @@ def main():
     print("[Info] Building embedding inputs...")
     for i, (item_id, row) in enumerate(df.iterrows()):
         print(f"[Debug] Processing item_id={item_id}\n")
-        if i > 3:
+        if i > 2:
             break
         try:
             inputs = build_item_embedding_input(
@@ -122,13 +133,13 @@ def main():
     print(f"[Info] Finished. Successfully processed {len(item_inputs)} items.")
 
     # Debug: print first few item_inputs
-    print("\n[Debug] Sample item_inputs:")
-    for i, (item_id, inputs) in enumerate(item_inputs.items()):
-        print(f"\nItem ID: {item_id}")
-        for k, v in inputs.items():
-            print(f"  {k}: shape {tuple(v.shape)}")
-        if i >= 2:
-            break
+    # print("\n[Debug] Sample item_inputs:")
+    # for i, (item_id, inputs) in enumerate(item_inputs.items()):
+    #     print(f"\nItem ID: {item_id}")
+    #     for k, v in inputs.items():
+    #         print(f"  {k}: shape {tuple(v.shape)}")
+    #     if i >= 2:
+    #         break
 
     # Save as PyTorch file
     torch.save(item_inputs, "item_inputs.pt")

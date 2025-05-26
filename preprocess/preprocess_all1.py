@@ -1,28 +1,38 @@
 import pandas as pd
-import torch
+import ast
 import torch.nn as nn
 import numpy as np
 from sklearn.preprocessing import LabelEncoder
 
+import pandas as pd
+import json
+
 def load_and_process_item_meta(path: str) -> pd.DataFrame:
     # Step 1: Load data
     df = pd.read_csv(path)
-    # Step 2: Build item_id index (assumed unique)
+    
+    # Step 2: Ensure unique item_id index
     df = df.drop_duplicates(subset=['item_id']).reset_index(drop=True)
     df.set_index('item_id', inplace=True)
 
-    # Process images field to extract image_url
-    import json
+    # Step 3: Extract image_url from images field
     def extract_image_url(images_field):
         try:
             if pd.isnull(images_field):
                 return None
-            images = json.loads(images_field.replace("'", '"'))
+            images = ast.literal_eval(images_field)  # 安全解析为 Python 对象
             if isinstance(images, list) and len(images) > 0:
                 main_image = images[0]
-                return main_image.get('hi_res') or main_image.get('large') or main_image.get('thumb')
-        except:
-            return None
+                if isinstance(main_image, dict):
+                    for key in ['hi_res', 'large', 'thumb']:
+                        url = main_image.get(key)
+                        if isinstance(url, str) and url.strip():
+                            return url
+        except Exception as e:
+            print(f"Error: {e}")
+        return None
+
+    df['image_url'] = df['images'].apply(extract_image_url)
 
     def extract_video_title(videos_field):
         try:
@@ -34,7 +44,6 @@ def load_and_process_item_meta(path: str) -> pd.DataFrame:
         except:
             return None
 
-    df['image_url'] = df['images'].apply(extract_image_url)
     df['video_title'] = df['videos'].apply(extract_video_title)
     df['video_text'] = df['video_title'].apply(lambda x: f"Video: {x}" if pd.notnull(x) else "")
 

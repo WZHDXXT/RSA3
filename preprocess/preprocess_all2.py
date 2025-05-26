@@ -69,4 +69,4 @@ df2 = df2.set_index('item_id')
 print(df2.loc[326])
 
 # Save the processed DataFrame to a CSV file
-# df2.to_csv("../data/item_meta_processed.csv")
+df2.to_csv("../data/item_meta_processed.csv")

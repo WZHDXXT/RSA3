@@ -117,8 +117,7 @@ def main():
     print("[Info] Building embedding inputs...")
     for i, (item_id, row) in enumerate(df.iterrows()):
         print(f"[Debug] Processing item_id={item_id}\n")
-        if i > 2:
-            break
+        
         try:
             inputs = build_item_embedding_input(
                 row=row,

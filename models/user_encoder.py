@@ -2,14 +2,32 @@ import torch
 import torch.nn as nn
 
 class UserEncoder(nn.Module):
-    def __init__(self, item_embedding):
+    def __init__(self, item_encoder):
         super(UserEncoder, self).__init__()
-        self.item_embedding = item_embedding
-        self.gru = nn.GRU(input_size=item_embedding.embedding_dim, hidden_size=128, batch_first=True)
+        self.item_encoder = item_encoder  # shared encoder
 
-    def forward(self, item_seq):
-        if item_seq.dim() == 3 and item_seq.size(-1) == 1:
-            item_seq = item_seq.squeeze(-1)
-        embed_seq = self.item_embedding(item_seq)  # (B, T, E)
-        _, h = self.gru(embed_seq)  # h: (1, B, H)
-        return h.squeeze(0)  # (B, H)
+    def forward(self, history_input_dicts):
+        """
+        history_input_dicts: List[Dict]  # history item information
+        Returns: Tensor [1, embedding_dim]
+        """
+        device = next(self.item_encoder.parameters()).device
+        embeddings = []
+
+        for inputs in history_input_dicts:
+            inputs = {k: v.to(device) for k, v in inputs.items()}
+            with torch.no_grad():  
+                emb = self.item_encoder(
+                    category=inputs['category'],
+                    store=inputs['store'],
+                    parent_asin=inputs['parent_asin'],
+                    text_embedding=inputs['text_embedding'],
+                    num_vec=inputs['num_vec'],
+                    image_vec=inputs['image_vec']
+                )  # shape: [1, 128]
+                embeddings.append(emb)
+
+        if len(embeddings) == 0:
+            return torch.zeros((1, 128), device=device)
+        else:
+            return torch.mean(torch.stack(embeddings, dim=0), dim=0)  # shape: [1, 128]

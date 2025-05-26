@@ -2,7 +2,7 @@ import pandas as pd
 import json
 from preprocess_all1 import load_and_process_item_meta
 def process_categories_text(df, columns):
-    """为 DataFrame 添加多个 categories_text 字段，支持通过 item_id 查找"""
+    """Add multiple *_text fields to DataFrame, allowing lookup by item_id"""
     def parse(row, column):
         raw = row[column]
         if pd.isnull(raw) or raw in ['', '[]', [], {}]:
@@ -17,12 +17,12 @@ def process_categories_text(df, columns):
             if isinstance(parsed, dict):
                 return " ".join([f"{k} {v}" for k, v in parsed.items() if v])
             elif isinstance(parsed, list):
-                # 处理如 ['Material: 304 Steel', 'Unit: 5g']
+                # Handle cases like ['Material: 304 Steel', 'Unit: 5g']
                 return " ".join([s.replace(":", "") for s in parsed if isinstance(s, str)])
             else:
                 return ''
         except Exception:
-            # fallback: 如果是普通字符串（无结构标记），直接返回清理后的文本
+            # fallback: if it's a plain string (no structured format), return cleaned text
             if isinstance(raw, str):
                 return raw.strip().replace(";", " ").replace(",", " ")
             return ''
@@ -57,16 +57,16 @@ df = process_categories_text(df, columns=['description',
 print(df.loc[326])
 df2 = load_and_process_item_meta("../data/item_meta.csv").reset_index()
 
-# 提取 df 中的 _text 字段
+# Extract *_text fields from df
 text_fields = ['description_text', 'features_text', 'title_text', 'details_text']
 df_text = df[text_fields].reset_index()
 
-# 合并并设置索引
+# Merge and reset index
 df2 = df2.merge(df_text, on='item_id', how='left')
 df2 = df2.set_index('item_id')
 
-# 示例验证
+# Example validation
 print(df2.loc[326])
 
-# 保存处理后的 DataFrame 为 CSV 文件
+# Save the processed DataFrame to a CSV file
 # df2.to_csv("../data/item_meta_processed.csv")

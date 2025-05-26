@@ -5,13 +5,13 @@ import numpy as np
 from sklearn.preprocessing import LabelEncoder
 
 def load_and_process_item_meta(path: str) -> pd.DataFrame:
-    # Step 1: 读取数据
+    # Step 1: Load data
     df = pd.read_csv(path)
-    # Step 2: 构建 item_id 索引（假设唯一）
+    # Step 2: Build item_id index (assumed unique)
     df = df.drop_duplicates(subset=['item_id']).reset_index(drop=True)
     df.set_index('item_id', inplace=True)
 
-    # 处理 images 字段，提取 image_url
+    # Process images field to extract image_url
     import json
     def extract_image_url(images_field):
         try:
@@ -38,13 +38,13 @@ def load_and_process_item_meta(path: str) -> pd.DataFrame:
     df['video_title'] = df['videos'].apply(extract_video_title)
     df['video_text'] = df['video_title'].apply(lambda x: f"Video: {x}" if pd.notnull(x) else "")
 
-    # Step 3.1: main_category → 类别编码
+    # Step 3.1: Encode main_category as category
     le = LabelEncoder()
     df['main_category_encoded'] = le.fit_transform(df['main_category'].fillna("unknown"))
-    # Step 3.2: store → 类别编码
+    # Step 3.2: Encode store as category
     le_store = LabelEncoder()
     df['store_encoded'] = le_store.fit_transform(df['store'].fillna("unknown"))
-    # Step 3.3: parent_asin → 类别编码
+    # Step 3.3: Encode parent_asin as category
     le_parent_asin = LabelEncoder()
     df['parent_asin_encoded'] = le_parent_asin.fit_transform(df['parent_asin'].fillna("unknown"))
 

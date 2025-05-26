@@ -1,12 +1,12 @@
 import torch
 import pandas as pd
 from tqdm import tqdm
-import pickle  # 用于保存数据
+import pickle  # Used to save data
 from sentence_transformers import SentenceTransformer
 
 import torch
 from numpy import log1p
-# from utils.image import load_and_preprocess_image  # 确保此函数存在
+# from utils.image import load_and_preprocess_image
 from PIL import Image
 import requests
 from torchvision import transforms
@@ -19,8 +19,8 @@ def get_image_encoder(device='cpu'):
 
 def load_and_preprocess_image(image_url, image_size=224):
     """
-    从 URL 加载图像并预处理为 CLIP/BLIP 可接受的张量
-    返回: Tensor [3, H, W]（float32, 已归一化）
+    # Load image from URL and preprocess it for CLIP-compatible input
+    # Returns: Tensor [3, H, W] (float32, normalized)
     """
     try:
         response = requests.get(image_url, timeout=5)
@@ -41,12 +41,12 @@ def load_and_preprocess_image(image_url, image_size=224):
 
 
 def build_item_embedding_input(row, sentence_bert_model, image_encoder=None, device='cpu'):
-    # 类别型字段
+    # Categorical features
     category = torch.tensor([row['main_category_encoded']], dtype=torch.long).to(device)
     store = torch.tensor([row['store_encoded']], dtype=torch.long).to(device)
     parent_asin = torch.tensor([row['parent_asin_encoded']], dtype=torch.long).to(device)
 
-    # 文本拼接
+    # Text concatenation
     full_text = " ".join([
         str(row.get('title_text', '')),
         str(row.get('description_text', '')),
@@ -57,13 +57,13 @@ def build_item_embedding_input(row, sentence_bert_model, image_encoder=None, dev
     ]).strip()
     text_vec = sentence_bert_model.encode(full_text, convert_to_tensor=True).unsqueeze(0).to(device)  # [1, 384]
 
-    # 数值字段
+    # Numerical features
     price_log = log1p(row.get('price_encoded', 0.0))
     rating_log = log1p(row.get('rating_number_encoded', 0.0))
     avg_rating = row.get('average_rating_encoded', 0.0)
     num_vec = torch.tensor([[rating_log, price_log, avg_rating]], dtype=torch.float32).to(device)  # [1, 3]
 
-    # 图像字段
+    # Image features
     image_url = row.get('image_url', None)
     if image_encoder is not None and image_url:
         try:
@@ -86,16 +86,16 @@ def build_item_embedding_input(row, sentence_bert_model, image_encoder=None, dev
 
 
 def main():
-    # 设置设备
+    # Set device
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     print(f"[Info] Using device: {device}")
 
-    # 加载模型
+    # Load models
     print("[Info] Loading models...")
     sentence_bert_model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2', device=device)
     image_encoder = get_image_encoder(device)
 
-    # 加载数据
+    # Load data
     print("[Info] Loading data...")
     df = pd.read_csv('../data/item_meta_processed.csv')
     df = df.drop_duplicates(subset=['item_id']).reset_index(drop=True)
@@ -121,10 +121,10 @@ def main():
 
     print(f"[Info] Finished. Successfully processed {len(item_inputs)} items.")
 
-    # # 保存为 PyTorch 文件
+    # # Save as PyTorch file
     # torch.save(item_inputs, "item_inputs.pt")
 
-    # # 可选：保存为 pickle
+    # # Optional: Save as pickle
     # with open("item_inputs.pkl", "wb") as f:
     #     pickle.dump(item_inputs, f)
 

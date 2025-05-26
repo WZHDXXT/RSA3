@@ -5,13 +5,13 @@ import numpy as np
 from sklearn.preprocessing import LabelEncoder
 
 def load_and_process_item_meta(path: str) -> pd.DataFrame:
-    # Step 1: 读取数据
+    # Step 1: Load data
     df = pd.read_csv(path)
-    # Step 2: 构建 item_id 索引（假设唯一）
+    # Step 2: Build item_id index (assumed unique)
     df = df.drop_duplicates(subset=['item_id']).reset_index(drop=True)
     df.set_index('item_id', inplace=True)
 
-    # 处理 images 字段，提取 image_url
+    # Process images field to extract image_url
     import json
     def extract_image_url(images_field):
         try:

@@ -26,7 +26,7 @@ def load_and_preprocess_image(image_url, image_size=224):
         response = requests.get(image_url, timeout=5)
         image = Image.open(response.raw).convert('RGB')
     except Exception as e:
-        raise RuntimeError(f"无法加载图片: {image_url}，原因: {e}")
+        raise RuntimeError(f"Can't load: {image_url}，: {e}")
 
     preprocess = transforms.Compose([
         transforms.Resize(image_size, interpolation=Image.BICUBIC),

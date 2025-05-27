@@ -12,7 +12,7 @@ def compute_recall_at_k(submission_path, test_path, k=10):
 
     for _, row in submission.iterrows():
         user = row['user_id']
-        pred_items = list(map(int, row['item_id'].split(',')))[:k]
+        pred_items = list(map(int, row['item_id'].split(' ')))[:k]
 
         true_items = test_user_item.get(user, set())
         if not true_items:
@@ -26,4 +26,4 @@ def compute_recall_at_k(submission_path, test_path, k=10):
     print(f"Average Recall@{k}: {avg_recall:.4f}")
     return avg_recall
 
-compute_recall_at_k("output/submission_test.csv", "data/test.csv", k=10)
+compute_recall_at_k("output/submission.csv", "data/test.csv", k=10)

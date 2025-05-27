@@ -71,6 +71,14 @@ class ItemEncoder(nn.Module):
         )
 
     def forward(self, category, store, parent_asin, text_embedding, num_vec, image_vec):
+        device = next(self.parameters()).device
+        category = category.to(device)
+        store = store.to(device)
+        parent_asin = parent_asin.to(device)
+        text_embedding = text_embedding.to(device)
+        num_vec = num_vec.to(device).float()
+        image_vec = image_vec.to(device).float()
+
         cat_emb = self.category_embed(category)
         store_emb = self.store_embed(store)
         parent_emb = self.parent_asin_embed(parent_asin)

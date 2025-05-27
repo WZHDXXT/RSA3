@@ -13,20 +13,13 @@ from torch.utils.data import DataLoader
 df_user = pd.read_csv('data/train.csv')
 df_user = df_user.sort_values(by=['user_id', 'timestamp'])
 user_histories = df_user.groupby('user_id')['item_id'].apply(list).to_dict()
-from sklearn.model_selection import train_test_split
-
-all_user_ids = list(user_histories.keys())
-train_users, val_users = train_test_split(all_user_ids, test_size=0.1, random_state=42)
-
-train_user_histories = {uid: user_histories[uid] for uid in train_users}
-val_user_histories = {uid: user_histories[uid] for uid in val_users}
 
 
 df = pd.read_csv('data/item_meta_processed.csv')
 num_categories = int(df['main_category_encoded'].max()) + 1
 num_stores = int(df['store_encoded'].max()) + 1
 num_parent_asin = int(df['parent_asin_encoded'].max()) + 1
-
+print(num_categories, num_stores, num_parent_asin)
 item_encoder = ItemEncoder(
     num_categories=num_categories,
     num_stores=num_stores,
@@ -45,19 +38,25 @@ item_inputs=torch.load("data/item_inputs.pt", map_location=device, weights_only=
 #                  if all(i not in item_inputs for i in items)]
 # print(f"[Debug] Users with zero valid items: {len(invalid_users)}")
 
-train_dataset = TwoTowerTrainDataset(train_user_histories, item_inputs, popular_items, num_negatives=1)
-val_dataset = TwoTowerTrainDataset(val_user_histories, item_inputs, popular_items, num_negatives=1)
+import json
+
+from utils.data_loader import TwoTowerTrainDataset
+
+
+# Load JSONL training samples
+import json
+
+with open("preprocess/train_samples.json", "r") as f:
+    samples = [json.loads(line) for line in f]
+print('loading dataset')
+train_dataset = TwoTowerTrainDataset(samples, item_inputs)
 
 train_loader = DataLoader(
-    train_dataset, batch_size=32, shuffle=True,
+    train_dataset,
+    batch_size=32,
+    shuffle=True,
     collate_fn=lambda x: collate_fn(x, item_inputs, item_encoder, user_encoder, device)
 )
-
-val_loader = DataLoader(
-    val_dataset, batch_size=32, shuffle=False,
-    collate_fn=lambda x: collate_fn(x, item_inputs, item_encoder, user_encoder, device)
-)
-
 
 
 # for batch_idx, (user_history_batch, item_input_batch, labels) in enumerate(train_loader):
@@ -66,25 +65,27 @@ val_loader = DataLoader(
 #     print(f"Item input batch size: {len(item_input_batch)}")
 #     print(f"Labels: {labels.tolist()}")
 
-#     # print the first user's history info
-#     print("\n🔍 First user's history item count:", len(user_history_batch[0]))
+#     # Print the number of items in the first user's history
+#     print("\n🔍 Number of items in the first user's history:", len(user_history_batch[0]))
 #     print("Sample item keys:", list(user_history_batch[0][0].keys()))  # e.g., ['category', 'store', ...]
 
-#     # print some dimensions of an item
+#     # Print some dimensions of one item
 #     print("\n🧩 First item_input:")
 #     example_item = item_input_batch[0]
 #     for k, v in example_item.items():
 #         print(f" - {k}: shape {tuple(v.shape)}")
 
-#     # limit to inspecting 1–2 batches
+#     # Limit to look at only 1-2 batches
 #     if batch_idx >= 1:
 #         break
+print('loading model')
 
 model = TwoTowerModel(user_encoder, item_encoder).to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
 loss_fn = torch.nn.BCEWithLogitsLoss()
 
 for epoch in range(3):
+    print(f'training with epoch {epoch}')
     model.train()
     for user_histories_batch, item_inputs_batch, labels in train_loader:
         scores, _, _ = model(user_histories_batch, item_inputs_batch)
@@ -94,19 +95,4 @@ for epoch in range(3):
         loss.backward()
         optimizer.step()
 
-    print(f"[Epoch {epoch}] Train Loss: {loss.item():.4f}")
-
-    model.eval()
-    val_loss_total = 0.0
-    val_samples = 0
-
-    with torch.no_grad():
-        for user_histories_batch, item_inputs_batch, labels in val_loader:
-            scores, _, _ = model(user_histories_batch, item_inputs_batch)
-            loss = loss_fn(scores, labels)
-
-            val_loss_total += loss.item() * labels.size(0)  # accumulate total loss
-            val_samples += labels.size(0)
-
-    avg_val_loss = val_loss_total / val_samples
-    print(f"[Epoch {epoch}] Validation Loss: {avg_val_loss:.4f}")
+    print(f"[Epoch {epoch}] Loss: {loss.item():.4f}")

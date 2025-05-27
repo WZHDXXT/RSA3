@@ -1,115 +1,102 @@
+from tqdm import tqdm
+from torch.utils.data import Dataset
+import random
+import torch
+import json
+
 import torch
 from torch.utils.data import Dataset
-import pandas as pd
-import pickle
-from collections import defaultdict
-import numpy as np
+import random
 
-class RecDataset(Dataset):
-    def __init__(self, csv_path, meta_pkl_path, max_seq_len=50, num_negatives=1, mode='train'):
-        self.data = pd.read_csv(csv_path)
-        with open(meta_pkl_path, 'rb') as f:
-            raw_meta = pickle.load(f)
-            if isinstance(raw_meta, pd.DataFrame):
-                self.item_meta = raw_meta.set_index('item_id').to_dict(orient='index')
-            else:
-                self.item_meta = raw_meta
-        # print(self.item_meta)
-        self.mode = mode
-        self.max_seq_len = max_seq_len
+from torch.utils.data import Dataset
+import random
+
+class TwoTowerTrainDataset(Dataset):
+    def __init__(self, user_histories, item_inputs, popular_items, num_negatives=1, max_seq_len=30):
+        """
+        user_histories: Dict[int, List[int]] — 每个用户的 item_id 序列
+        item_inputs: Dict[int, Dict[str, Tensor]] — 有效的 item 特征
+        popular_items: List[int] — 常见热门 item，用于补充不足的历史
+        """
+        self.item_inputs = item_inputs
+        self.all_item_ids = list(item_inputs.keys())
+        self.popular_items = [iid for iid in popular_items if iid in item_inputs]
         self.num_negatives = num_negatives
-        self.user_sequences = self._build_user_sequences()
-        self.users = list(self.user_sequences.keys())
+        self.max_seq_len = max_seq_len
 
-    def _build_user_sequences(self):
-        user_history = defaultdict(list)
-        for _, row in self.data.sort_values("timestamp").iterrows():
-            user_history[row["user_id"]].append(row["item_id"])
+        self.user_histories = {}
+        for uid, item_ids in user_histories.items():
+            filtered = [iid for iid in item_ids if iid in item_inputs]
 
-        sequences = {}
-        for user, items in user_history.items():
-            if len(items) >= 1:
-                sequences[user] = items
-        return sequences
+            # 若少于 2 条，补热门 item（避免重复）
+            if len(filtered) < 2:
+                needed = 2 - len(filtered)
+                supplement = [iid for iid in self.popular_items if iid not in filtered]
+                filtered += supplement[:needed]
+
+            if len(filtered) >= 2:
+                self.user_histories[uid] = filtered
+
+        self.user_ids = list(self.user_histories.keys())
 
     def __len__(self):
-        return len(self.users)
+        return len(self.user_ids)
 
     def __getitem__(self, idx):
-        user = self.users[idx]
-        seq = self.user_sequences[user]
-        input_seq = seq[:-1][-self.max_seq_len:]
-        target_pos = seq[-1]  # 正样本
+        user_id = self.user_ids[idx]
+        item_ids = self.user_histories[user_id]
 
-        padded_seq = [0] * (self.max_seq_len - len(input_seq)) + input_seq
-        padded_seq = torch.tensor(padded_seq, dtype=torch.long)
+        pos_item_id = item_ids[-1]
+        history_ids = item_ids[:-1][-self.max_seq_len:]
 
-        pos_feat = self._get_item_features(target_pos)
-        pos_label = torch.tensor(1.0, dtype=torch.float)
+        exclude_set = set(item_ids)
+        candidates = [iid for iid in self.all_item_ids if iid not in exclude_set]
+        if not candidates:
+            neg_item_id = random.choice(self.all_item_ids)
+        else:
+            neg_item_id = random.choice(candidates)
 
-        all_items = set(self.item_meta.keys())
-        user_items = set(seq)
-        negative_candidates = list(all_items - user_items)
-
-        neg_samples = []
-        for _ in range(self.num_negatives):
-            target_neg = np.random.choice(negative_candidates)
-            neg_feat = self._get_item_features(target_neg)
-            neg_label = torch.tensor(0.0, dtype=torch.float)
-            neg_samples.append((padded_seq, neg_feat, neg_label, target_neg))
-
-        samples = [(padded_seq, pos_feat, pos_label, target_pos)] + neg_samples
-        if self.mode == 'eval':
-            return samples[0]  # 只返回正样本
-        return samples
-
-    def _get_item_features(self, item_id):
-        meta = self.item_meta.get(item_id, {})
-        category = meta.get('main_category', 0)
-        store = meta.get('store', 0)
-        parent = meta.get('parent_asin', 0)
-        text_embed = meta.get('text_embedding', [0.0] * 384)
-        text_embed_tensor = torch.tensor(text_embed, dtype=torch.float)
-        return [
-            torch.tensor(category, dtype=torch.long),
-            torch.tensor(store, dtype=torch.long),
-            torch.tensor(parent, dtype=torch.long),
-            text_embed_tensor
-        ]
+        return {
+            'user_id': user_id,
+            'history_ids': history_ids,
+            'pos_item_id': pos_item_id,
+            'neg_item_id': neg_item_id
+        }
 
 
-def build_embedding_table(num_items, dim):
-    return torch.nn.Embedding(num_items + 1, dim, padding_idx=0)
+def collate_fn(batch, item_inputs, device='cpu', max_seq_len=30):
+    user_history_batch = []
+    item_input_batch = []
+    labels = []
 
+    for sample in batch:
+        history_ids = sample['history_ids'][-max_seq_len:]
+        pos_id = sample['pos_item_id']
+        neg_id = sample['neg_item_id']
 
+        if pos_id not in item_inputs or neg_id not in item_inputs:
+            continue
 
-def get_metadata_stats(meta_pkl_path):
-    with open(meta_pkl_path, 'rb') as f:
-        meta = pickle.load(f)
-    category_set, store_set, parent_set = set(), set(), set()
-    for m in meta.values():
-        category_set.add(m.get('main_category', 0))
-        store_set.add(m.get('store', 0))
-        parent_set.add(m.get('parent_asin', 0))
-    return len(meta), len(category_set), len(store_set), len(parent_set)
+        user_history_batch.append(history_ids)
+        item_input_batch.append(item_inputs[pos_id])
+        labels.append(1.0)
 
+        user_history_batch.append(history_ids)
+        item_input_batch.append(item_inputs[neg_id])
+        labels.append(0.0)
 
-# Main function for testing dataset loading
-if __name__ == "__main__":
-    import argparse
+    if len(labels) == 0:
+        return torch.empty(0), torch.empty(0), [], torch.tensor([], dtype=torch.float32, device=device)
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--csv_path', type=str, default='../data/train.csv')
-    parser.add_argument('--meta_pkl_path', type=str, default='../data/processed_item_meta.pkl')
-    args = parser.parse_args()
+    # Padding for BERT
+    max_len = max(len(seq) for seq in user_history_batch)
+    input_ids = torch.zeros(len(user_history_batch), max_len, dtype=torch.long)
+    attention_mask = torch.zeros_like(input_ids)
 
-    print("Loading dataset...")
-    dataset = RecDataset(args.csv_path, args.meta_pkl_path)
-    print(f"Number of users: {len(dataset)}")
-    sample = dataset[0]
-    print(len(sample))
-    print("Sample data:")
-    print("  Padded sequence:", sample[0])
-    print("  Item features:", sample[1])
-    print("  Label:", sample[2])
-    # print("Sample metadata for target item:", dataset.item_meta.get(int(sample[2]), {}))
+    for i, seq in enumerate(user_history_batch):
+        input_ids[i, :len(seq)] = torch.tensor(seq, dtype=torch.long)
+        attention_mask[i, :len(seq)] = 1
+
+    label_tensor = torch.tensor(labels, dtype=torch.float32, device=device)
+
+    return input_ids.to(device), attention_mask.to(device), item_input_batch, label_tensor

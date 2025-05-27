@@ -8,7 +8,7 @@ from collections import Counter
 
 def test_two_tower_model(user_id, user_histories, item_inputs, model, popular_items, device='cpu'):
     """
-    # Test if TwoTowerModel can run successfully on real data and output reasonable scores.
+    测试 TwoTowerModel 是否在真实数据上能成功跑通，并输出合理得分。
 
     Args:
         user_id: int，用户 ID
@@ -30,19 +30,18 @@ def test_two_tower_model(user_id, user_histories, item_inputs, model, popular_it
         print(f"[Debug] popular_items (前10): {popular_items[:10]}")
         print(f"[Debug] items available in item_inputs: {len(item_inputs)}")
 
-        # Check filtered popular candidates
+        # 检查过滤后的热门候选
         supplement = [iid for iid in popular_items if iid not in existing_set and iid in item_inputs]
         print(f"[Debug] 可用的热门补充项: {supplement[:10]}")
 
         item_ids += supplement[:needed]
-        # user {user_id} supplemented with {len(supplement[:needed])} popular items → current history length:
         print(f"[Info] user {user_id} 补充了 {len(supplement[:needed])} 条热门 item → 当前历史数: {len(item_ids)}")
 
     if len(item_ids) < 2:
         print(f"[Error] user {user_id} 补充后仍不足 2 条 item")
         return
 
-    # Construct user history and positive sample (last one as positive, rest as history)
+    # 正确构造历史和正样本（最后一条为正样本，其余为历史）
     history_ids = item_ids[:-1]
     pos_item_id = item_ids[-1]
 
@@ -50,7 +49,7 @@ def test_two_tower_model(user_id, user_histories, item_inputs, model, popular_it
         print(f"[Error] Positive item {pos_item_id} not in item_inputs")
         return
 
-    # Construct user input
+    # 构造用户输入
     history_input_dicts = [
         item_inputs[iid] for iid in history_ids if iid in item_inputs
     ]
@@ -58,7 +57,7 @@ def test_two_tower_model(user_id, user_histories, item_inputs, model, popular_it
         print(f"[Error] No valid history for user_id={user_id}")
         return
 
-    # Construct a negative sample (randomly pick an item the user hasn't interacted with)
+    # 构造负样本（从所有 item_inputs 中随机采一个该用户未看过的）
     candidate_ids = list(item_inputs.keys())
     neg_item_id = None
     attempts = 0
@@ -73,11 +72,11 @@ def test_two_tower_model(user_id, user_histories, item_inputs, model, popular_it
         print("[Warning] Failed to sample a negative item.")
         return
 
-    # Prepare item inputs
+    # 准备 item inputs
     pos_input = item_inputs[pos_item_id]
     neg_input = item_inputs[neg_item_id]
 
-    # Call model forward pass (note: batch)
+    # 调用模型 forward（注意是 batch）
     model.eval()
     with torch.no_grad():
         scores, _, _ = model(
@@ -98,8 +97,7 @@ df_user = pd.read_csv('../data/train.csv')
 df_user = df_user.sort_values(by=['user_id', 'timestamp'])
 user_histories = df_user.groupby('user_id')['item_id'].apply(list).to_dict()
 
-# Dynamically select the first user for testing
-user_id = list(user_histories.keys())[0]  
+user_id = list(user_histories.keys())[0]  # 动态选择第一个用户进行测试
 df = pd.read_csv('../data/item_meta_processed.csv')
 
 num_categories = int(df['main_category_encoded'].max()) + 1
@@ -116,8 +114,7 @@ user_encoder = UserEncoder(item_encoder)
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 item_freq = Counter([iid for ids in user_histories.values() for iid in ids])
-# Top 100 popular items
-popular_items = [iid for iid, _ in item_freq.most_common(100)]  
+popular_items = [iid for iid, _ in item_freq.most_common(100)]  # top 100 热门 item
 
 test_two_tower_model(
     user_id=user_id,

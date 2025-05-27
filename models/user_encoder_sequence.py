@@ -1,58 +1,56 @@
 import torch
 import torch.nn as nn
+from transformers import BertModel, BertConfig
+
+# class UserEncoder(nn.Module):
+#     def __init__(self, num_items, embedding_dim=128, max_seq_len=30):
+#         super(UserEncoder, self).__init__()
+
+#         # 初始化一个简单的 BERT 配置
+#         config = BertConfig(
+#             vocab_size=num_items,
+#             hidden_size=embedding_dim,
+#             num_hidden_layers=2,
+#             num_attention_heads=4,
+#             intermediate_size=embedding_dim * 4,
+#             max_position_embeddings=max_seq_len,
+#             pad_token_id=0
+#         )
+#         self.bert = BertModel(config)
+
+#     def forward(self, history_item_ids):
+#         """
+#         history_item_ids: List[int] — 用户历史 item_id 列表
+#         Returns: Tensor [1, embedding_dim]
+#         """
+#         if len(history_item_ids) == 0:
+#             return torch.zeros((1, self.bert.config.hidden_size), device=next(self.parameters()).device)
+
+#         input_ids = torch.tensor(history_item_ids, dtype=torch.long, device=next(self.parameters()).device).unsqueeze(0)  # [1, seq_len]
+#         attention_mask = torch.ones_like(input_ids)  # [1, seq_len]
+
+#         outputs = self.bert(input_ids=input_ids, attention_mask=attention_mask)
+#         last_hidden = outputs.last_hidden_state  # [1, seq_len, hidden_size]
+
+#         # 平均池化
+#         user_emb = last_hidden.mean(dim=1)  # [1, hidden_size]
+#         return user_emb
+
 
 class UserEncoder(nn.Module):
-    def __init__(self, item_encoder, embedding_dim=128, max_seq_len=50, n_heads=4, n_layers=2):
-        super(UserEncoder, self).__init__()
-        self.item_encoder = item_encoder  # Shared item encoder
-        self.embedding_dim = embedding_dim
-        self.max_seq_len = max_seq_len
+    def __init__(self, num_items, embedding_dim=128, max_seq_len=30):
+        super().__init__()
+        config = BertConfig(
+            vocab_size=num_items,
+            hidden_size=embedding_dim,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            intermediate_size=embedding_dim * 4,
+            max_position_embeddings=max_seq_len,
+            pad_token_id=0
+        )
+        self.bert = BertModel(config)
 
-        # Positional encoding
-        self.position_embedding = nn.Embedding(max_seq_len, embedding_dim)
-
-        # Transformer encoder
-        encoder_layer = nn.TransformerEncoderLayer(d_model=embedding_dim, nhead=n_heads, batch_first=True)
-        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=n_layers)
-
-        # Optional projection layer (for [CLS] or mean pooling)
-        self.output_layer = nn.Linear(embedding_dim, embedding_dim)
-
-    def forward(self, history_input_dicts):
-        device = next(self.parameters()).device
-        embeddings = []
-
-        # Step 1: Encode user history with item_encoder
-        for inputs in history_input_dicts:
-            inputs = {k: v.to(device) for k, v in inputs.items()}
-            with torch.no_grad():
-                emb = self.item_encoder(
-                    category=inputs['category'],
-                    store=inputs['store'],
-                    parent_asin=inputs['parent_asin'],
-                    text_embedding=inputs['text_embedding'],
-                    num_vec=inputs['num_vec'],
-                    image_vec=inputs['image_vec']
-                )  # shape: [1, 128]
-                embeddings.append(emb)
-
-        if len(embeddings) == 0:
-            return torch.zeros((1, self.embedding_dim), device=device)
-
-        # Step 2: Concatenate into sequence
-        seq = torch.cat(embeddings, dim=0)  # shape: [seq_len, 128]
-        seq_len = seq.shape[0]
-        seq = seq.unsqueeze(0)  # → [1, seq_len, 128]
-
-        # Step 3: Add positional encoding
-        position_ids = torch.arange(seq_len, dtype=torch.long, device=device).unsqueeze(0)  # [1, seq_len]
-        pos_emb = self.position_embedding(position_ids)  # [1, seq_len, 128]
-        seq = seq + pos_emb
-
-        # Step 4: Transformer encoding
-        transformer_output = self.transformer(seq)  # [1, seq_len, 128]
-
-        # Step 5: Use the last token or mean pooling
-        user_embedding = transformer_output.mean(dim=1)  # [1, 128]
-
-        return self.output_layer(user_embedding)  # [1, 128]
+    def forward(self, input_ids, attention_mask):
+        outputs = self.bert(input_ids=input_ids, attention_mask=attention_mask)
+        return outputs.last_hidden_state.mean(dim=1)  # [B, D]
